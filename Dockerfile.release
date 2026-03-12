@@ -1,0 +1,22 @@
+# Dockerfile.release — slim image from pre-built binary
+# Used by CI after the fat binary is already compiled.
+# Multi-arch: the correct binary is copied in per platform.
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -g 65532 kiln && useradd -u 65532 -g kiln -s /bin/false kiln
+
+ARG TARGETARCH
+COPY image/linux-${TARGETARCH}/kiln /usr/local/bin/kiln
+RUN chmod +x /usr/local/bin/kiln
+
+USER kiln
+VOLUME /data
+VOLUME /source
+
+ENTRYPOINT ["/usr/local/bin/kiln", "serve"]
+CMD ["/source"]

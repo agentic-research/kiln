@@ -1,0 +1,8 @@
+# Compiled binary
+bin/kiln
+
+# Task runner cache
+.task/
+
+# direnv
+.envrc

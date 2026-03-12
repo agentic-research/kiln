@@ -1,0 +1,259 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write  # cosign keyless signing
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14          # Apple Silicon runner
+            goos: darwin
+            goarch: arm64
+            rust_target: aarch64-apple-darwin
+            artifact: kiln-darwin-arm64
+          - os: macos-13          # Intel runner
+            goos: darwin
+            goarch: amd64
+            rust_target: x86_64-apple-darwin
+            artifact: kiln-darwin-amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            artifact: kiln-linux-arm64
+            cross: true
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+            artifact: kiln-linux-amd64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout kiln
+        uses: actions/checkout@v4
+
+      - name: Checkout mache (public)
+        uses: actions/checkout@v4
+        with:
+          repository: mache-org/mache
+          path: mache
+
+      - name: Checkout ley-line (private)
+        uses: actions/checkout@v4
+        with:
+          repository: agentic-research/ley-line
+          path: ley-line
+          token: ${{ secrets.LEYLINE_PAT }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: mache/go.sum
+
+      # Cross-compilation deps for linux/arm64
+      - name: Install cross-compile toolchain
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      # macOS: install fuse-t for CGO headers
+      - name: Install fuse-t
+        if: startsWith(matrix.os, 'macos')
+        run: brew install --cask fuse-t
+
+      # Linux: install libfuse-dev
+      - name: Install libfuse-dev
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y libfuse3-dev
+
+      # Build ley-line staticlib
+      - name: Build ley-line staticlib
+        working-directory: ley-line/rs
+        env:
+          PKG_CONFIG_PATH: ${{ github.workspace }}/ley-line/rs/pkgconfig
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: |
+          cargo build --release --lib -p leyline-fs --target ${{ matrix.rust_target }}
+
+      # Build kiln (mache + ley-line linked)
+      - name: Build kiln binary
+        working-directory: mache
+        env:
+          CGO_ENABLED: '1'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_CFLAGS: >-
+            ${{ startsWith(matrix.os, 'macos')
+              && '-I/Library/Frameworks/fuse_t.framework/Versions/Current/Headers'
+              || '' }}
+            -I${{ github.workspace }}/ley-line/rs/crates/fs/include
+          CGO_LDFLAGS: >-
+            ${{ startsWith(matrix.os, 'macos')
+              && '-F/Library/Frameworks -framework fuse_t -Wl,-rpath,/Library/Frameworks'
+              || '' }}
+            -L${{ github.workspace }}/ley-line/rs/target/${{ matrix.rust_target }}/release
+            -lleyline_fs -lm -ldl -lpthread
+          CC: ${{ matrix.cross && 'aarch64-linux-gnu-gcc' || '' }}
+        run: |
+          go build -ldflags "-s -w" -o ${{ github.workspace }}/${{ matrix.artifact }} .
+
+      # Codesign on macOS
+      - name: Codesign
+        if: startsWith(matrix.os, 'macos')
+        run: codesign -s - --force --deep ${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  # OCI image (linux/amd64 + linux/arm64)
+  container:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kiln
+        uses: actions/checkout@v4
+
+      - name: Download linux binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kiln-linux-*
+          path: dist/
+
+      - name: Prepare multi-arch context
+        run: |
+          mkdir -p image/linux-amd64 image/linux-arm64
+          cp dist/kiln-linux-amd64/kiln-linux-amd64 image/linux-amd64/kiln
+          cp dist/kiln-linux-arm64/kiln-linux-arm64 image/linux-arm64/kiln
+          chmod +x image/linux-amd64/kiln image/linux-arm64/kiln
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.release
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.IMAGE_NAME }}:latest
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image
+        run: cosign sign --yes ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+
+  # GitHub Release with binaries
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: Create checksums
+        run: |
+          cd dist
+          for d in kiln-*; do
+            mv "$d"/"$d" . 2>/dev/null || true
+          done
+          rmdir kiln-*/ 2>/dev/null || true
+          sha256sum kiln-* > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/kiln-*
+            dist/checksums.txt
+
+  # Update Homebrew tap formula with new checksums
+  homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: agentic-research/homebrew-tap
+          token: ${{ secrets.LEYLINE_PAT }}
+
+      - name: Download checksums
+        run: |
+          curl -sL "https://github.com/agentic-research/kiln/releases/download/${{ github.ref_name }}/checksums.txt" -o checksums.txt
+
+      - name: Update formula
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"  # strip leading v
+
+          SHA_DARWIN_ARM64=$(grep kiln-darwin-arm64 checksums.txt | awk '{print $1}')
+          SHA_DARWIN_AMD64=$(grep kiln-darwin-amd64 checksums.txt | awk '{print $1}')
+          SHA_LINUX_ARM64=$(grep kiln-linux-arm64 checksums.txt | awk '{print $1}')
+          SHA_LINUX_AMD64=$(grep kiln-linux-amd64 checksums.txt | awk '{print $1}')
+
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/kiln.rb
+
+          # Update sha256 values in order of appearance
+          # darwin-arm64 is first, then darwin-amd64, linux-arm64, linux-amd64
+          python3 -c "
+          import re
+          with open('Formula/kiln.rb') as f:
+              content = f.read()
+          shas = ['${SHA_DARWIN_ARM64}', '${SHA_DARWIN_AMD64}', '${SHA_LINUX_ARM64}', '${SHA_LINUX_AMD64}']
+          i = 0
+          def replace_sha(m):
+              global i
+              result = f'sha256 \"{shas[i]}\"'
+              i += 1
+              return result
+          content = re.sub(r'sha256 \"[A-Fa-f0-9]+\"', replace_sha, content)
+          content = re.sub(r'sha256 \"PLACEHOLDER\"', replace_sha, content)
+          with open('Formula/kiln.rb', 'w') as f:
+              f.write(content)
+          "
+
+      - name: Commit and push
+        run: |
+          git config user.name "kiln-ci"
+          git config user.email "kiln-ci@users.noreply.github.com"
+          git add Formula/kiln.rb
+          git commit -m "kiln ${{ github.ref_name }}"
+          git push

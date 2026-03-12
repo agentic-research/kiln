@@ -1,0 +1,55 @@
+# melange.yaml — build kiln as an APK package
+#
+# melange build melange.yaml --arch x86_64,aarch64 \
+#   --source-dir .. --signing-key melange.rsa
+
+package:
+  name: kiln
+  version: 0.1.0
+  epoch: 0
+  description: "mache + ley-line in a box — MCP server for structural code projection"
+  copyright:
+    - license: Apache-2.0
+  dependencies:
+    runtime:
+      - ca-certificates-bundle
+      - libsqlite-3.0
+
+environment:
+  contents:
+    packages:
+      - build-base
+      - go-1.23
+      - rust-1.82
+      - cargo
+      - sqlite-dev
+      - ca-certificates-bundle
+
+pipeline:
+  # Step 1: Build ley-line staticlib
+  - runs: |
+      cd ley-line/rs
+      cargo build --release --lib -p leyline-fs
+      install -Dm644 target/release/libleyline_fs.a \
+        "${{targets.destdir}}/usr/lib/libleyline_fs.a"
+      if [ -f crates/fs/include/leyline_fs.h ]; then
+        install -Dm644 crates/fs/include/leyline_fs.h \
+          "${{targets.destdir}}/usr/include/leyline_fs.h"
+      fi
+
+  # Step 2: Build mache, linked against ley-line
+  - uses: go/build
+    with:
+      modroot: ./mache
+      packages: ./cmd/mache
+      output: kiln
+      ldflags: "-s -w"
+      tags: ""
+    env:
+      CGO_ENABLED: "1"
+      CGO_LDFLAGS: "-L${{targets.destdir}}/usr/lib -lleyline_fs -lm -ldl -lpthread"
+      CGO_CFLAGS: "-I${{targets.destdir}}/usr/include"
+
+  # Step 3: Install binary
+  - runs: |
+      install -Dm755 kiln "${{targets.destdir}}/usr/bin/kiln"

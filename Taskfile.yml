@@ -1,0 +1,147 @@
+version: '3'
+
+vars:
+  MACHE_DIR: '{{.ROOT_DIR}}/../mache'
+  LEYLINE_DIR: '{{.ROOT_DIR}}/../ley-line'
+  IMAGE_NAME: kiln
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  UNAME_S:
+    sh: uname -s
+  UNAME_M:
+    sh: uname -m
+  RUST_TARGET:
+    sh: |
+      ARCH=$(uname -m)
+      # Rust uses aarch64, not arm64
+      if [ "$ARCH" = "arm64" ]; then ARCH="aarch64"; fi
+      if [ "$(uname -s)" = "Linux" ]; then
+        echo "${ARCH}-unknown-linux-gnu"
+      else
+        echo "${ARCH}-apple-darwin"
+      fi
+  LEYLINE_LIB: '{{.LEYLINE_DIR}}/rs/target/{{.RUST_TARGET}}/release/libleyline_fs.a'
+  LEYLINE_INCLUDE: '{{.LEYLINE_DIR}}/rs/crates/fs/include'
+  # fuse-t paths (macOS)
+  FUSE_T_HEADERS: /Library/Frameworks/fuse_t.framework/Versions/Current/Headers
+  FUSE_T_FRAMEWORK: /Library/Frameworks
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # ── ley-line staticlib ───────────────────────────────────────────────
+  leyline-lib:
+    desc: Build ley-line staticlib (Rust)
+    dir: '{{.LEYLINE_DIR}}/rs'
+    env:
+      # fuser crate looks for "fuse" via pkg-config; fuse-t installs as "fuse-t".
+      # ley-line ships a shim .pc file that bridges this on macOS.
+      PKG_CONFIG_PATH: '{{.LEYLINE_DIR}}/rs/pkgconfig'
+    cmds:
+      - cargo build --release --lib -p leyline-fs --target {{.RUST_TARGET}}
+    sources:
+      - '{{.LEYLINE_DIR}}/rs/crates/fs/src/**/*.rs'
+      - '{{.LEYLINE_DIR}}/rs/crates/schema/src/**/*.rs'
+      - '{{.LEYLINE_DIR}}/rs/Cargo.toml'
+    generates:
+      - '{{.LEYLINE_LIB}}'
+
+  # ── Fat binary ──────────────────────────────────────────────────────
+  binary:
+    desc: Build fat binary (mache + ley-line linked via CGO)
+    deps: [leyline-lib]
+    dir: '{{.MACHE_DIR}}'
+    env:
+      CGO_ENABLED: '1'
+      # Merge fuse-t flags (mache needs) + ley-line flags (kiln needs)
+      CGO_CFLAGS: '{{if eq OS "darwin"}}-I{{.FUSE_T_HEADERS}} {{end}}-I{{.LEYLINE_INCLUDE}}'
+      CGO_LDFLAGS: '{{if eq OS "darwin"}}-F{{.FUSE_T_FRAMEWORK}} -framework fuse_t -Wl,-rpath,{{.FUSE_T_FRAMEWORK}} {{end}}-L{{.LEYLINE_DIR}}/rs/target/{{.RUST_TARGET}}/release -lleyline_fs -lm -ldl -lpthread'
+    cmds:
+      - go build -o {{.ROOT_DIR}}/bin/kiln .
+      - cmd: codesign -s - --force --deep --entitlements entitlements.plist {{.ROOT_DIR}}/bin/kiln
+        platforms: [darwin]
+      - echo "Built {{.ROOT_DIR}}/bin/kiln"
+      - ls -lh {{.ROOT_DIR}}/bin/kiln
+    sources:
+      - '{{.MACHE_DIR}}/**/*.go'
+      - '{{.MACHE_DIR}}/go.mod'
+      - '{{.LEYLINE_LIB}}'
+    generates:
+      - '{{.ROOT_DIR}}/bin/kiln'
+
+  install:
+    desc: Build and install kiln to ~/.local/bin
+    deps: [binary]
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cp {{.ROOT_DIR}}/bin/kiln ~/.local/bin/kiln
+      - cmd: codesign -s - --force --deep --entitlements {{.MACHE_DIR}}/entitlements.plist ~/.local/bin/kiln
+        platforms: [darwin]
+
+  # ── Container images ────────────────────────────────────────────────
+  image:
+    desc: Build Docker image (dev/iteration)
+    cmds:
+      - docker build -f Dockerfile -t {{.IMAGE_NAME}}:{{.VERSION}} -t {{.IMAGE_NAME}}:latest ..
+
+  apk:
+    desc: Build distroless OCI image via melange + apko (release)
+    cmds:
+      - melange keygen melange.rsa
+      - |
+        melange build melange.yaml \
+          --arch {{.UNAME_M}} \
+          --source-dir .. \
+          --signing-key melange.rsa \
+          --out-dir ./packages
+      - |
+        apko build apko.yaml \
+          {{.IMAGE_NAME}}:{{.VERSION}} \
+          kiln.tar \
+          --keyring-append melange.rsa.pub
+      - echo "Built kiln.tar (load with docker load < kiln.tar)"
+
+  sign:
+    desc: Sign OCI image with cosign (uses signet KMS if available)
+    cmds:
+      - |
+        if command -v sigstore-kms-signet >/dev/null 2>&1; then
+          echo "Signing with signet KMS provider"
+          cosign sign --key signet:// {{.IMAGE_NAME}}:{{.VERSION}}
+        else
+          echo "Signing with cosign keyless (Fulcio)"
+          cosign sign {{.IMAGE_NAME}}:{{.VERSION}}
+        fi
+
+  # ── Test ─────────────────────────────────────────────────────────────
+  test:
+    desc: Smoke test — project kiln's own source via MCP
+    deps: [binary]
+    cmds:
+      - |
+        echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}' | \
+          ./bin/kiln serve . | head -1
+      - echo "OK"
+
+  # ── Dev ──────────────────────────────────────────────────────────────
+  shell:
+    desc: Drop into container for debugging
+    deps: [image]
+    cmds:
+      - |
+        docker run -it --rm \
+          -v {{.ROOT_DIR}}/..:/workspace:ro \
+          --entrypoint /bin/bash \
+          {{.IMAGE_NAME}}:latest
+
+  # ── Clean ────────────────────────────────────────────────────────────
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf ./bin ./packages ./kiln.tar
+      - rm -f melange.rsa melange.rsa.pub
+      - cmd: docker rmi {{.IMAGE_NAME}}:latest {{.IMAGE_NAME}}:{{.VERSION}} 2>/dev/null
+        ignore_error: true

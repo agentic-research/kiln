@@ -1,0 +1,46 @@
+# apko.yaml — assemble kiln OCI image
+#
+# apko build apko.yaml kiln:latest kiln.tar
+#
+# Result: distroless OCI image with just the kiln binary.
+# No shell, no package manager, no apt. ~15-20MB.
+
+contents:
+  repositories:
+    - https://packages.wolfi.dev/os
+  keyring:
+    - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+  packages:
+    - ca-certificates-bundle
+    - wolfi-baselayout
+    - kiln
+
+accounts:
+  groups:
+    - groupname: kiln
+      gid: 65532
+  users:
+    - username: kiln
+      uid: 65532
+      gid: 65532
+  run-as: 65532
+
+entrypoint:
+  command: /usr/bin/kiln serve
+
+# Persistent projection cache
+volumes:
+  - /data
+
+# Default CMD passes through to entrypoint
+cmd: /source
+
+archs:
+  - x86_64
+  - aarch64
+
+annotations:
+  org.opencontainers.image.title: kiln
+  org.opencontainers.image.description: "mache + ley-line: structural code projection as MCP"
+  org.opencontainers.image.source: https://github.com/agentic-research/kiln
+  org.opencontainers.image.licenses: Apache-2.0
