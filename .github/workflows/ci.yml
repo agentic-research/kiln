@@ -1,0 +1,49 @@
+name: CI
+
+# Triggered by upstream repos (mache, ley-line) on merge to main,
+# or manually for ad-hoc builds.
+on:
+  repository_dispatch:
+    types: [upstream-update]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Auto-tag and release? (bumps patch version)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kiln
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # need tags for version bump
+
+      - name: Determine version
+        id: version
+        run: |
+          # Get latest tag, bump patch
+          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          MAJOR=$(echo "$LATEST" | cut -d. -f1)
+          MINOR=$(echo "$LATEST" | cut -d. -f2)
+          PATCH=$(echo "$LATEST" | cut -d. -f3)
+          NEXT_PATCH=$((PATCH + 1))
+          NEXT="${MAJOR}.${MINOR}.${NEXT_PATCH}"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Source: ${{ github.event.client_payload.repo || 'manual' }}"
+          echo "Latest: $LATEST → Next: $NEXT"
+
+      - name: Tag and release
+        if: ${{ github.event_name == 'repository_dispatch' || inputs.release }}
+        run: |
+          git config user.name "kiln-ci"
+          git config user.email "kiln-ci@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.next }}"
+          git push origin "${{ steps.version.outputs.next }}"
+          echo "Tagged ${{ steps.version.outputs.next }} — release workflow will handle the rest"
