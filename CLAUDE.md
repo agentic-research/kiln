@@ -41,7 +41,7 @@ task test         # Smoke test
 ## Key details
 
 - The fat binary IS mache's binary, just compiled with ley-line linked in.
-  The output is named `kiln` but it's `go build ./cmd/mache` under the hood.
+  The output is named `mache` and it's `go build .` in the mache dir.
 - CGO_LDFLAGS and CGO_CFLAGS are the critical glue — they point Go's linker
   at ley-line's `libleyline_fs.a` staticlib.
 - On Linux, the binary can be fully static via musl. On macOS it uses the

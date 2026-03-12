@@ -2,7 +2,17 @@
 
 Where you fire a mache.
 
-Kiln packages [mache](https://github.com/mache-org/mache) and
+## Table of contents
+
+- [What's inside](#whats-inside)
+- [Quick start](#quick-start)
+- [Editor setup](#editor-setup)
+- [Building](#building)
+- [Distribution](#distribution)
+- [Architecture](#architecture)
+- [License](#license)
+
+Kiln packages [mache](https://github.com/agentic-research/mache) and
 [ley-line](https://github.com/agentic-research/ley-line) into a single
 artifact — either a static fat binary or a distroless OCI image. One
 command gives you a fully wired MCP server backed by ley-line's zero-copy
@@ -10,20 +20,25 @@ arena.
 
 ## What's inside
 
-```
-┌────────────────────────────────────────┐
-│  kiln                                  │
-│                                        │
-│  mache (Go)          ley-line (Rust)   │
-│  ┌──────────┐        ┌─────────────┐  │
-│  │ schema   │──FFI──▶│ arena       │  │
-│  │ ingest   │        │ sqlite      │  │
-│  │ MCP svr  │        │ graph       │  │
-│  └────┬─────┘        └─────────────┘  │
-│       │ stdio                          │
-│       ▼                                │
-│  MCP endpoint                          │
-└────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph kiln["kiln (fat binary)"]
+        subgraph mache["mache (Go)"]
+            Schema[Schema]
+            Ingest[Ingest]
+            MCP[MCP Server]
+        end
+
+        subgraph leyline["ley-line (Rust)"]
+            Arena[Arena]
+            SQLite[SQLite]
+            Graph[Graph]
+        end
+
+        mache -->|C FFI| leyline
+    end
+
+    MCP -->|"Streamable HTTP :7532"| Client["MCP Clients"]
 ```
 
 ## Quick start
@@ -32,7 +47,7 @@ arena.
 
 ```bash
 task binary
-./bin/kiln serve /path/to/your/code
+./bin/mache serve /path/to/your/code
 ```
 
 ### As an OCI image
@@ -48,22 +63,96 @@ docker run -i --rm \
   kiln /source
 ```
 
-## Claude Code integration
+## Editor setup
 
-### Binary mode
+Mache serves an MCP endpoint over Streamable HTTP on `:7532` by default.
+Start the server, then point your editor at it.
+
+### 1. Start the server
+
+```bash
+# Serve a codebase (HTTP on :7532 by default)
+mache serve /path/to/your/code
+
+# Or with a specific schema
+mache serve -s examples/go-schema.json ./internal/
+
+# Background via brew (macOS)
+brew services start agentic-research/tap/mache
+```
+
+### 2. Connect your editor
+
+#### Claude Code
+
+```bash
+# One-liner (HTTP — recommended)
+claude mcp add --transport http mache http://localhost:7532/mcp
+
+# Or stdio mode (Claude manages the process)
+claude mcp add mache -- mache serve --stdio /path/to/your/code
+```
+
+#### VS Code / Cursor
+
+Add to your `.vscode/mcp.json` (or global `settings.json` under `"mcp"`):
 
 ```json
 {
-  "mcpServers": {
+  "servers": {
     "mache": {
-      "command": "kiln",
-      "args": ["serve", "/path/to/code"]
+      "type": "http",
+      "url": "http://localhost:7532/mcp"
     }
   }
 }
 ```
 
-### Container mode
+For stdio mode:
+
+```json
+{
+  "servers": {
+    "mache": {
+      "type": "stdio",
+      "command": "mache",
+      "args": ["serve", "--stdio", "/path/to/your/code"]
+    }
+  }
+}
+```
+
+#### Gemini CLI
+
+Add to `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "mache": {
+      "httpUrl": "http://localhost:7532/mcp"
+    }
+  }
+}
+```
+
+#### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mache": {
+      "serverUrl": "http://localhost:7532/mcp"
+    }
+  }
+}
+```
+
+#### Container mode (any editor)
+
+For stdio-based editors that don't support HTTP transport:
 
 ```json
 {
@@ -73,8 +162,8 @@ docker run -i --rm \
       "args": [
         "run", "-i", "--rm",
         "-v", "${workspaceFolder}:/source:ro",
-        "-v", "kiln-cache:/data",
-        "kiln", "/source"
+        "-v", "mache-cache:/data",
+        "mache", "--stdio", "/source"
       ]
     }
   }
@@ -112,7 +201,7 @@ Three tiers, same binary inside:
 | `task apk` | Release, registry | ~15-20MB | Yes |
 
 The apko path produces a distroless image: no shell, no package manager,
-just the kiln binary + musl libc + ca-certs. Signed with cosign, optionally
+just the mache binary + musl libc + ca-certs. Signed with cosign, optionally
 via signet's KMS provider.
 
 ## Architecture
@@ -143,4 +232,4 @@ Kiln just puts them in a box and fires it.
 
 ## License
 
-Apache-2.0 (same as mache and ley-line)
+Apache-2.0 (kiln and mache). Ley-line is closed-source.

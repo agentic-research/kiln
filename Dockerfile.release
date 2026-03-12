@@ -8,15 +8,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g 65532 kiln && useradd -u 65532 -g kiln -s /bin/false kiln
+RUN groupadd -g 65532 mache && useradd -u 65532 -g mache -s /bin/false mache
 
 ARG TARGETARCH
-COPY image/linux-${TARGETARCH}/kiln /usr/local/bin/kiln
-RUN chmod +x /usr/local/bin/kiln
+COPY image/linux-${TARGETARCH}/mache /usr/local/bin/mache
+RUN chmod +x /usr/local/bin/mache
 
-USER kiln
+USER mache
 VOLUME /data
 VOLUME /source
 
-ENTRYPOINT ["/usr/local/bin/kiln", "serve"]
+ENTRYPOINT ["/usr/local/bin/mache", "serve"]
 CMD ["/source"]

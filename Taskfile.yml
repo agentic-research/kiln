@@ -1,8 +1,10 @@
 version: '3'
 
 vars:
-  MACHE_DIR: '{{.ROOT_DIR}}/../mache'
-  LEYLINE_DIR: '{{.ROOT_DIR}}/../ley-line'
+  MACHE_DIR:
+    sh: echo "${MACHE_DIR:-{{.ROOT_DIR}}/../mache}"
+  LEYLINE_DIR:
+    sh: echo "${LEYLINE_DIR:-{{.ROOT_DIR}}/../ley-line}"
   IMAGE_NAME: kiln
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
@@ -39,7 +41,8 @@ tasks:
     env:
       # fuser crate looks for "fuse" via pkg-config; fuse-t installs as "fuse-t".
       # ley-line ships a shim .pc file that bridges this on macOS.
-      PKG_CONFIG_PATH: '{{.LEYLINE_DIR}}/rs/pkgconfig'
+      # On Linux, system pkg-config finds libfuse-dev natively — no shim needed.
+      PKG_CONFIG_PATH: '{{if eq OS "darwin"}}{{.LEYLINE_DIR}}/rs/pkgconfig{{end}}'
     cmds:
       - cargo build --release --lib -p leyline-fs --target {{.RUST_TARGET}}
     sources:
@@ -60,25 +63,42 @@ tasks:
       CGO_CFLAGS: '{{if eq OS "darwin"}}-I{{.FUSE_T_HEADERS}} {{end}}-I{{.LEYLINE_INCLUDE}}'
       CGO_LDFLAGS: '{{if eq OS "darwin"}}-F{{.FUSE_T_FRAMEWORK}} -framework fuse_t -Wl,-rpath,{{.FUSE_T_FRAMEWORK}} {{end}}-L{{.LEYLINE_DIR}}/rs/target/{{.RUST_TARGET}}/release -lleyline_fs -lm -ldl -lpthread'
     cmds:
-      - go build -o {{.ROOT_DIR}}/bin/kiln .
-      - cmd: codesign -s - --force --deep --entitlements entitlements.plist {{.ROOT_DIR}}/bin/kiln
+      - go build -o {{.ROOT_DIR}}/bin/mache .
+      - cmd: codesign -s - --force --deep --entitlements entitlements.plist {{.ROOT_DIR}}/bin/mache
         platforms: [darwin]
-      - echo "Built {{.ROOT_DIR}}/bin/kiln"
-      - ls -lh {{.ROOT_DIR}}/bin/kiln
+      - echo "Built {{.ROOT_DIR}}/bin/mache"
+      - ls -lh {{.ROOT_DIR}}/bin/mache
     sources:
       - '{{.MACHE_DIR}}/**/*.go'
       - '{{.MACHE_DIR}}/go.mod'
       - '{{.LEYLINE_LIB}}'
     generates:
-      - '{{.ROOT_DIR}}/bin/kiln'
+      - '{{.ROOT_DIR}}/bin/mache'
+
+  # ── CI binary (stripped, custom output path) ────────────────────────
+  ci-binary:
+    desc: Build stripped binary for CI release
+    deps: [leyline-lib]
+    dir: '{{.MACHE_DIR}}'
+    env:
+      CGO_ENABLED: '1'
+      CGO_CFLAGS: '{{if eq OS "darwin"}}-I{{.FUSE_T_HEADERS}} {{end}}-I{{.LEYLINE_INCLUDE}}'
+      CGO_LDFLAGS: '{{if eq OS "darwin"}}-F{{.FUSE_T_FRAMEWORK}} -framework fuse_t -Wl,-rpath,{{.FUSE_T_FRAMEWORK}} {{end}}-L{{.LEYLINE_DIR}}/rs/target/{{.RUST_TARGET}}/release -lleyline_fs -lm -ldl -lpthread'
+    vars:
+      OUTPUT: '{{.OUTPUT | default (print .ROOT_DIR "/bin/mache")}}'
+    cmds:
+      - go build -ldflags "-s -w" -o {{.OUTPUT}} .
+      - cmd: codesign -s - --force --deep --entitlements entitlements.plist {{.OUTPUT}}
+        platforms: [darwin]
+      - ls -lh {{.OUTPUT}}
 
   install:
-    desc: Build and install kiln to ~/.local/bin
+    desc: Build and install mache to ~/.local/bin
     deps: [binary]
     cmds:
       - mkdir -p ~/.local/bin
-      - cp {{.ROOT_DIR}}/bin/kiln ~/.local/bin/kiln
-      - cmd: codesign -s - --force --deep --entitlements {{.MACHE_DIR}}/entitlements.plist ~/.local/bin/kiln
+      - cp {{.ROOT_DIR}}/bin/mache ~/.local/bin/mache
+      - cmd: codesign -s - --force --deep --entitlements {{.MACHE_DIR}}/entitlements.plist ~/.local/bin/mache
         platforms: [darwin]
 
   # ── Container images ────────────────────────────────────────────────
@@ -123,7 +143,7 @@ tasks:
     cmds:
       - |
         echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}' | \
-          ./bin/kiln serve . | head -1
+          ./bin/mache serve --stdio . | head -1
       - echo "OK"
 
   # ── Dev ──────────────────────────────────────────────────────────────
