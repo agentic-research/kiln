@@ -39,9 +39,6 @@ tasks:
     desc: Build ley-line staticlib (Rust)
     dir: '{{.LEYLINE_DIR}}/rs'
     env:
-      # fuser crate looks for "fuse" via pkg-config; fuse-t installs as "fuse-t".
-      # ley-line ships a shim .pc file that bridges this on macOS.
-      # On Linux, system pkg-config finds libfuse-dev natively — no shim needed.
       PKG_CONFIG_PATH: '{{if eq OS "darwin"}}{{.LEYLINE_DIR}}/rs/pkgconfig{{end}}'
     cmds:
       - cargo build --release --lib -p leyline-fs --target {{.RUST_TARGET}}
@@ -59,21 +56,13 @@ tasks:
     dir: '{{.MACHE_DIR}}'
     env:
       CGO_ENABLED: '1'
-      # Merge fuse-t flags (mache needs) + ley-line flags (kiln needs)
       CGO_CFLAGS: '{{if eq OS "darwin"}}-I{{.FUSE_T_HEADERS}} {{end}}-I{{.LEYLINE_INCLUDE}}'
-      CGO_LDFLAGS: '{{if eq OS "darwin"}}-F{{.FUSE_T_FRAMEWORK}} -framework fuse_t -Wl,-rpath,{{.FUSE_T_FRAMEWORK}} {{end}}-L{{.LEYLINE_DIR}}/rs/target/{{.RUST_TARGET}}/release -lleyline_fs -lm -ldl -lpthread'
+      CGO_LDFLAGS: '{{if eq OS "darwin"}}-F{{.FUSE_T_FRAMEWORK}} -framework fuse_t -Wl,-rpath,{{.FUSE_T_FRAMEWORK}} {{end}}{{.LEYLINE_LIB}} -lm -ldl -lpthread'
     cmds:
-      - go build -o {{.ROOT_DIR}}/bin/mache .
+      - go build -v -o {{.ROOT_DIR}}/bin/mache .
       - cmd: codesign -s - --force --deep --entitlements entitlements.plist {{.ROOT_DIR}}/bin/mache
         platforms: [darwin]
-      - echo "Built {{.ROOT_DIR}}/bin/mache"
       - ls -lh {{.ROOT_DIR}}/bin/mache
-    sources:
-      - '{{.MACHE_DIR}}/**/*.go'
-      - '{{.MACHE_DIR}}/go.mod'
-      - '{{.LEYLINE_LIB}}'
-    generates:
-      - '{{.ROOT_DIR}}/bin/mache'
 
   # ── CI binary (stripped, custom output path) ────────────────────────
   ci-binary:
@@ -83,7 +72,7 @@ tasks:
     env:
       CGO_ENABLED: '1'
       CGO_CFLAGS: '{{if eq OS "darwin"}}-I{{.FUSE_T_HEADERS}} {{end}}-I{{.LEYLINE_INCLUDE}}'
-      CGO_LDFLAGS: '{{if eq OS "darwin"}}-F{{.FUSE_T_FRAMEWORK}} -framework fuse_t -Wl,-rpath,{{.FUSE_T_FRAMEWORK}} {{end}}-L{{.LEYLINE_DIR}}/rs/target/{{.RUST_TARGET}}/release -lleyline_fs -lm -ldl -lpthread'
+      CGO_LDFLAGS: '{{if eq OS "darwin"}}-F{{.FUSE_T_FRAMEWORK}} -framework fuse_t -Wl,-rpath,{{.FUSE_T_FRAMEWORK}} {{end}}{{.LEYLINE_LIB}} -lm -ldl -lpthread'
     vars:
       OUTPUT: '{{.OUTPUT | default (print .ROOT_DIR "/bin/mache")}}'
     cmds:
