@@ -27,16 +27,16 @@ jobs:
 
     steps:
       - name: Checkout kiln
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Checkout mache
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: agentic-research/mache
           path: mache
 
       - name: Checkout ley-line
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: agentic-research/ley-line
           path: ley-line
@@ -52,7 +52,7 @@ jobs:
           cache-dependency-path: mache/go.sum
 
       - name: Install Task
-        uses: go-task/setup-task@v1
+        uses: go-task/setup-task@v2
 
       # Platform deps — the only CI-specific part
       - name: Install fuse-t (macOS)
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout kiln
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download linux binary
         uses: actions/download-artifact@v7
@@ -154,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout homebrew-tap
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: agentic-research/homebrew-tap
           token: ${{ secrets.LEYLINE_PAT }}
