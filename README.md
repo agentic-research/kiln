@@ -186,7 +186,7 @@ task clean        # Remove artifacts
 
 ### Build requirements
 
-**Binary**: Go 1.23+, Rust 1.82+, C compiler.
+**Binary**: Go 1.25+, Rust 1.82+, C compiler.
 **Image** (Dockerfile): Docker or Podman. No local toolchains.
 **Image** (apko): melange, apko. Produces reproducible distroless images.
 
