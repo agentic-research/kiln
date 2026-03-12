@@ -2,11 +2,125 @@
 
 Where you fire a mache.
 
+## Install
+
+```bash
+brew install agentic-research/tap/mache
+```
+
+Then pick your editor — stdio mode is easiest (the editor manages the process,
+auto-serves whatever project you're in):
+
+### Claude Code
+
+```bash
+claude mcp add mache -- mache serve --stdio .
+```
+
+That's it. Claude Code spawns mache per-session and auto-detects your
+project's languages. No server to manage.
+
+### VS Code / Cursor
+
+Add to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "mache": {
+      "type": "stdio",
+      "command": "mache",
+      "args": ["serve", "--stdio", "."]
+    }
+  }
+}
+```
+
+### Gemini CLI
+
+Add to `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "mache": {
+      "command": "mache",
+      "args": ["serve", "--stdio", "."]
+    }
+  }
+}
+```
+
+### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mache": {
+      "command": "mache",
+      "args": ["serve", "--stdio", "."]
+    }
+  }
+}
+```
+
+### HTTP mode (shared server)
+
+If you prefer a long-running server that multiple clients can connect to:
+
+```bash
+# Serve a codebase (HTTP on :7532)
+mache serve /path/to/your/code
+
+# Or as a background service (macOS)
+brew services start agentic-research/tap/mache
+```
+
+Then point your editor at `http://localhost:7532/mcp`:
+
+```bash
+# Claude Code
+claude mcp add --transport http mache http://localhost:7532/mcp
+```
+
+```json
+// VS Code / Cursor (.vscode/mcp.json)
+{ "servers": { "mache": { "type": "http", "url": "http://localhost:7532/mcp" } } }
+
+// Gemini CLI (~/.gemini/settings.json)
+{ "mcpServers": { "mache": { "httpUrl": "http://localhost:7532/mcp" } } }
+
+// Windsurf (~/.codeium/windsurf/mcp_config.json)
+{ "mcpServers": { "mache": { "serverUrl": "http://localhost:7532/mcp" } } }
+```
+
+### Container mode
+
+For environments without a local install:
+
+```json
+{
+  "mcpServers": {
+    "mache": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "${workspaceFolder}:/source:ro",
+        "-v", "mache-cache:/data",
+        "mache", "--stdio", "/source"
+      ]
+    }
+  }
+}
+```
+
+---
+
 ## Table of contents
 
 - [What's inside](#whats-inside)
-- [Quick start](#quick-start)
-- [Editor setup](#editor-setup)
 - [Building](#building)
 - [Distribution](#distribution)
 - [Architecture](#architecture)
@@ -39,135 +153,6 @@ graph TD
     end
 
     MCP -->|"Streamable HTTP :7532"| Client["MCP Clients"]
-```
-
-## Quick start
-
-### As a binary
-
-```bash
-task binary
-./bin/mache serve /path/to/your/code
-```
-
-### As an OCI image
-
-```bash
-# Build distroless image via melange + apko
-task apk
-
-# Run it
-docker run -i --rm \
-  -v $(pwd):/source:ro \
-  -v kiln-cache:/data \
-  kiln /source
-```
-
-## Editor setup
-
-Mache serves an MCP endpoint over Streamable HTTP on `:7532` by default.
-Start the server, then point your editor at it.
-
-### 1. Start the server
-
-```bash
-# Serve a codebase (HTTP on :7532 by default)
-mache serve /path/to/your/code
-
-# Or with a specific schema
-mache serve -s examples/go-schema.json ./internal/
-
-# Background via brew (macOS)
-brew services start agentic-research/tap/mache
-```
-
-### 2. Connect your editor
-
-#### Claude Code
-
-```bash
-# One-liner (HTTP — recommended)
-claude mcp add --transport http mache http://localhost:7532/mcp
-
-# Or stdio mode (Claude manages the process)
-claude mcp add mache -- mache serve --stdio /path/to/your/code
-```
-
-#### VS Code / Cursor
-
-Add to your `.vscode/mcp.json` (or global `settings.json` under `"mcp"`):
-
-```json
-{
-  "servers": {
-    "mache": {
-      "type": "http",
-      "url": "http://localhost:7532/mcp"
-    }
-  }
-}
-```
-
-For stdio mode:
-
-```json
-{
-  "servers": {
-    "mache": {
-      "type": "stdio",
-      "command": "mache",
-      "args": ["serve", "--stdio", "/path/to/your/code"]
-    }
-  }
-}
-```
-
-#### Gemini CLI
-
-Add to `~/.gemini/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "mache": {
-      "httpUrl": "http://localhost:7532/mcp"
-    }
-  }
-}
-```
-
-#### Windsurf
-
-Add to `~/.codeium/windsurf/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "mache": {
-      "serverUrl": "http://localhost:7532/mcp"
-    }
-  }
-}
-```
-
-#### Container mode (any editor)
-
-For stdio-based editors that don't support HTTP transport:
-
-```json
-{
-  "mcpServers": {
-    "mache": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-v", "${workspaceFolder}:/source:ro",
-        "-v", "mache-cache:/data",
-        "mache", "--stdio", "/source"
-      ]
-    }
-  }
-}
 ```
 
 ## Building
