@@ -8,6 +8,10 @@ vars:
   IMAGE_NAME: kiln
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git -C '{{.MACHE_DIR}}' rev-parse --short HEAD 2>/dev/null || echo none
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
   UNAME_S:
     sh: uname -s
   UNAME_M:
@@ -76,7 +80,7 @@ tasks:
     vars:
       OUTPUT: '{{.OUTPUT | default (print .ROOT_DIR "/bin/mache")}}'
     cmds:
-      - go build -ldflags "-s -w" -o {{.OUTPUT}} .
+      - go build -ldflags "-s -w -X github.com/agentic-research/mache/cmd.Version={{.VERSION}} -X github.com/agentic-research/mache/cmd.Commit={{.COMMIT}} -X github.com/agentic-research/mache/cmd.Date={{.DATE}}" -o {{.OUTPUT}} .
       - cmd: codesign -s - --force --deep --entitlements entitlements.plist {{.OUTPUT}}
         platforms: [darwin]
       - ls -lh {{.OUTPUT}}
