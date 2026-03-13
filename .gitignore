@@ -9,3 +9,7 @@ bin/mache
 
 # CRUMB - personal memory (not tracked)
 .crumb/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
