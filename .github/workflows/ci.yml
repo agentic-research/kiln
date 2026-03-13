@@ -27,8 +27,9 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          # Get latest tag, bump patch
-          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          # Find the highest existing tag (across all refs, not just ancestors)
+          LATEST=$(git tag --sort=-v:refname | head -1)
+          if [ -z "$LATEST" ]; then LATEST="v0.0.0"; fi
           MAJOR=$(echo "$LATEST" | cut -d. -f1)
           MINOR=$(echo "$LATEST" | cut -d. -f2)
           PATCH=$(echo "$LATEST" | cut -d. -f3)
