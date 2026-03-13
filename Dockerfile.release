@@ -12,11 +12,13 @@ RUN groupadd -g 65532 mache && useradd -u 65532 -g mache -s /bin/false mache
 
 ARG TARGETARCH
 COPY image/linux-${TARGETARCH}/mache /usr/local/bin/mache
-RUN chmod +x /usr/local/bin/mache
+COPY image/linux-${TARGETARCH}/leyline /usr/local/bin/leyline
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/mache /usr/local/bin/leyline /usr/local/bin/entrypoint.sh
 
 USER mache
 VOLUME /data
 VOLUME /source
 
-ENTRYPOINT ["/usr/local/bin/mache", "serve"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/source"]
