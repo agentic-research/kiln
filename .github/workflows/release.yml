@@ -59,11 +59,11 @@ jobs:
       # Platform deps — the only CI-specific part
       - name: Install fuse-t (macOS)
         if: runner.os == 'macOS'
-        run: brew install --cask fuse-t
+        run: brew install --cask fuse-t capnp
 
       - name: Install libfuse-dev (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libfuse-dev
+        run: sudo apt-get update && sudo apt-get install -y libfuse-dev capnproto
 
       # Build — same command locally and in CI
       # In CI, repos are checked out inside workspace (not siblings)
