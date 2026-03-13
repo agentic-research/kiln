@@ -54,7 +54,7 @@ jobs:
           cache-dependency-path: mache/go.sum
 
       - name: Install Task
-        uses: go-task/setup-task@v2
+        uses: go-task/setup-task@v1
 
       # Platform deps — the only CI-specific part
       - name: Install fuse-t (macOS)
