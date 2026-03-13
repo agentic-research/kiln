@@ -12,7 +12,8 @@ RUN groupadd -g 65532 mache && useradd -u 65532 -g mache -s /bin/false mache
 
 ARG TARGETARCH
 COPY image/linux-${TARGETARCH}/mache /usr/local/bin/mache
-RUN chmod +x /usr/local/bin/mache
+COPY image/linux-${TARGETARCH}/leyline /usr/local/bin/leyline
+RUN chmod +x /usr/local/bin/mache /usr/local/bin/leyline
 
 USER mache
 VOLUME /data

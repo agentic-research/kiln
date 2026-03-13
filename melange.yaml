@@ -26,12 +26,15 @@ environment:
       - ca-certificates-bundle
 
 pipeline:
-  # Step 1: Build ley-line staticlib
+  # Step 1: Build ley-line staticlib + CLI binary
   - runs: |
       cd ley-line/rs
       cargo build --release --lib -p leyline-fs
+      cargo build --release -p leyline-cli --features lsp
       install -Dm644 target/release/libleyline_fs.a \
         "${{targets.destdir}}/usr/lib/libleyline_fs.a"
+      install -Dm755 target/release/leyline \
+        "${{targets.destdir}}/usr/bin/leyline"
       if [ -f crates/fs/include/leyline_fs.h ]; then
         install -Dm644 crates/fs/include/leyline_fs.h \
           "${{targets.destdir}}/usr/include/leyline_fs.h"
@@ -50,6 +53,6 @@ pipeline:
       CGO_LDFLAGS: "-L${{targets.destdir}}/usr/lib -lleyline_fs -lm -ldl -lpthread"
       CGO_CFLAGS: "-I${{targets.destdir}}/usr/include"
 
-  # Step 3: Install binary
+  # Step 3: Install binaries
   - runs: |
       install -Dm755 kiln "${{targets.destdir}}/usr/bin/kiln"

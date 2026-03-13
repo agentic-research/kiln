@@ -18,11 +18,13 @@ COPY ley-line/rs/ ./rs/
 
 WORKDIR /build/ley-line/rs
 RUN cargo build --release --lib -p leyline-fs \
-    && cargo build --release --lib -p leyline-sign
+    && cargo build --release --lib -p leyline-sign \
+    && cargo build --release -p leyline-cli --features lsp
 
-# Produce the static library and C header
+# Produce the static library, C header, and leyline CLI binary
 RUN cp target/release/libleyline_fs.a /build/ \
-    && cp target/release/libleyline_sign.a /build/ 2>/dev/null || true
+    && cp target/release/libleyline_sign.a /build/ 2>/dev/null || true \
+    && cp target/release/leyline /build/leyline
 
 # If cbindgen header exists, copy it; otherwise the one in mache's vendor wins
 RUN if [ -f crates/fs/include/leyline_fs.h ]; then \
@@ -59,9 +61,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=rust-builder /build/leyline /usr/local/bin/leyline
 COPY --from=go-builder /mache /usr/local/bin/mache
 COPY kiln/scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/leyline
 
 # Persistent cache for arena and projected databases
 VOLUME /data

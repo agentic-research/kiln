@@ -53,10 +53,25 @@ tasks:
     generates:
       - '{{.LEYLINE_LIB}}'
 
+  # ── ley-line CLI binary ─────────────────────────────────────────────
+  leyline-binary:
+    desc: Build ley-line CLI binary (Rust, with LSP support)
+    dir: '{{.LEYLINE_DIR}}/rs'
+    env:
+      PKG_CONFIG_PATH: '{{if eq OS "darwin"}}{{.LEYLINE_DIR}}/rs/pkgconfig{{end}}'
+    cmds:
+      - cargo build --release -p leyline-cli --features lsp --target {{.RUST_TARGET}}
+      - cp target/{{.RUST_TARGET}}/release/leyline {{.OUTPUT | default (print .ROOT_DIR "/bin/leyline")}}
+      - ls -lh {{.OUTPUT | default (print .ROOT_DIR "/bin/leyline")}}
+    sources:
+      - '{{.LEYLINE_DIR}}/rs/crates/cli/src/**/*.rs'
+      - '{{.LEYLINE_DIR}}/rs/crates/lsp/src/**/*.rs'
+      - '{{.LEYLINE_DIR}}/rs/Cargo.toml'
+
   # ── Fat binary ──────────────────────────────────────────────────────
   binary:
     desc: Build fat binary (mache + ley-line linked via CGO)
-    deps: [leyline-lib]
+    deps: [leyline-lib, leyline-binary]
     dir: '{{.MACHE_DIR}}'
     env:
       CGO_ENABLED: '1'
@@ -70,7 +85,7 @@ tasks:
 
   # ── CI binary (stripped, custom output path) ────────────────────────
   ci-binary:
-    desc: Build stripped binary for CI release
+    desc: Build stripped mache + leyline binaries for CI release
     deps: [leyline-lib]
     dir: '{{.MACHE_DIR}}'
     env:
@@ -79,18 +94,23 @@ tasks:
       CGO_LDFLAGS: '{{if eq OS "darwin"}}-F{{.FUSE_T_FRAMEWORK}} -framework fuse_t -Wl,-rpath,{{.FUSE_T_FRAMEWORK}} {{end}}{{.LEYLINE_LIB}} -lm -ldl -lpthread'
     vars:
       OUTPUT: '{{.OUTPUT | default (print .ROOT_DIR "/bin/mache")}}'
+      LEYLINE_OUTPUT: '{{.LEYLINE_OUTPUT | default (print .ROOT_DIR "/bin/leyline")}}'
     cmds:
       - go build -ldflags "-s -w -X github.com/agentic-research/mache/cmd.Version={{.VERSION}} -X github.com/agentic-research/mache/cmd.Commit={{.COMMIT}} -X github.com/agentic-research/mache/cmd.Date={{.DATE}}" -o {{.OUTPUT}} .
       - cmd: codesign -s - --force --deep --entitlements entitlements.plist {{.OUTPUT}}
         platforms: [darwin]
       - ls -lh {{.OUTPUT}}
+      - task: leyline-binary
+        vars:
+          OUTPUT: '{{.LEYLINE_OUTPUT}}'
 
   install:
-    desc: Build and install mache to ~/.local/bin
+    desc: Build and install mache + leyline to ~/.local/bin
     deps: [binary]
     cmds:
       - mkdir -p ~/.local/bin
       - cp {{.ROOT_DIR}}/bin/mache ~/.local/bin/mache
+      - cp {{.ROOT_DIR}}/bin/leyline ~/.local/bin/leyline
       - cmd: codesign -s - --force --deep --entitlements {{.MACHE_DIR}}/entitlements.plist ~/.local/bin/mache
         platforms: [darwin]
 

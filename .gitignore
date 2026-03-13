@@ -6,3 +6,6 @@ bin/mache
 
 # direnv
 .envrc
+
+# CRUMB - personal memory (not tracked)
+.crumb/
