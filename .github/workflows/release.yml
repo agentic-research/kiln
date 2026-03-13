@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.1.7)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,6 +18,8 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/mache
+  # workflow_dispatch passes the tag as input; tag push has it as ref_name
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   build:
@@ -132,14 +140,14 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.IMAGE_NAME }}:${{ env.TAG }}
             ${{ env.IMAGE_NAME }}:latest
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
       - name: Sign image
-        run: cosign sign --yes ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+        run: cosign sign --yes ${{ env.IMAGE_NAME }}:${{ env.TAG }}
 
   # GitHub Release with binaries
   release:
@@ -161,6 +169,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
           generate_release_notes: true
           files: |
             dist/mache-*
@@ -180,11 +189,11 @@ jobs:
 
       - name: Download checksums
         run: |
-          curl -sL "https://github.com/agentic-research/kiln/releases/download/${{ github.ref_name }}/checksums.txt" -o checksums.txt
+          curl -sL "https://github.com/agentic-research/kiln/releases/download/${{ env.TAG }}/checksums.txt" -o checksums.txt
 
       - name: Update formula
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ env.TAG }}"
           VERSION="${VERSION#v}"  # strip leading v
 
           SHA_DARWIN_ARM64=$(grep mache-darwin-arm64 checksums.txt | awk '{print $1}')
@@ -215,5 +224,5 @@ jobs:
           git config user.name "kiln-ci"
           git config user.email "kiln-ci@users.noreply.github.com"
           git add Formula/mache.rb
-          git commit -m "kiln ${{ github.ref_name }}"
+          git commit -m "kiln ${{ env.TAG }}"
           git push
