@@ -19,7 +19,7 @@ environment:
   contents:
     packages:
       - build-base
-      - go-1.23
+      - go-1.25
       - rust-1.82
       - cargo
       - sqlite-dev
@@ -44,7 +44,7 @@ pipeline:
   - uses: go/build
     with:
       modroot: ./mache
-      packages: ./cmd/mache
+      packages: .
       output: mache
       ldflags: "-s -w"
       tags: ""
