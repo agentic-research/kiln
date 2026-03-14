@@ -18,12 +18,10 @@ COPY ley-line/rs/ ./rs/
 
 WORKDIR /build/ley-line/rs
 RUN cargo build --release --lib -p leyline-fs \
-    && cargo build --release --lib -p leyline-sign \
     && cargo build --release -p leyline-cli --features lsp
 
 # Produce the static library, C header, and leyline CLI binary
 RUN cp target/release/libleyline_fs.a /build/ \
-    && cp target/release/libleyline_sign.a /build/ 2>/dev/null || true \
     && cp target/release/leyline /build/leyline
 
 # If cbindgen header exists, copy it; otherwise the one in mache's vendor wins
@@ -43,7 +41,6 @@ COPY mache/ ./
 
 # Bring in ley-line artifacts from rust stage
 COPY --from=rust-builder /build/libleyline_fs.a /usr/local/lib/
-COPY --from=rust-builder /build/libleyline_sign.a /usr/local/lib/
 COPY --from=rust-builder /build/leyline_fs.h /usr/local/include/
 
 # Build mache, linking the ley-line staticlib
