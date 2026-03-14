@@ -2,7 +2,7 @@
 #
 # apko build apko.yaml kiln:latest kiln.tar
 #
-# Result: distroless OCI image with just the kiln binary.
+# Result: distroless OCI image with just the mache binary.
 # No shell, no package manager, no apt. ~15-20MB.
 
 contents:
@@ -26,7 +26,7 @@ accounts:
   run-as: 65532
 
 entrypoint:
-  command: /usr/bin/kiln serve
+  command: /usr/bin/mache serve
 
 # Persistent projection cache
 volumes:

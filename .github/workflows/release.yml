@@ -32,6 +32,9 @@ jobs:
           - os: ubuntu-latest
             artifact: mache-linux-amd64
             leyline-artifact: leyline-linux-amd64
+          - os: ubuntu-24.04-arm
+            artifact: mache-linux-arm64
+            leyline-artifact: leyline-linux-arm64
 
     runs-on: ${{ matrix.os }}
 
@@ -96,7 +99,7 @@ jobs:
           name: ${{ matrix.leyline-artifact }}
           path: ${{ matrix.leyline-artifact }}
 
-  # OCI image (linux/amd64)
+  # OCI image (linux/amd64 + linux/arm64)
   container:
     needs: build
     runs-on: ubuntu-latest
@@ -104,23 +107,38 @@ jobs:
       - name: Checkout kiln
         uses: actions/checkout@v6
 
-      - name: Download linux mache binary
+      - name: Download linux amd64 mache binary
         uses: actions/download-artifact@v7
         with:
           name: mache-linux-amd64
           path: image/linux-amd64/
 
-      - name: Download linux leyline binary
+      - name: Download linux amd64 leyline binary
         uses: actions/download-artifact@v7
         with:
           name: leyline-linux-amd64
           path: image/linux-amd64/
+
+      - name: Download linux arm64 mache binary
+        uses: actions/download-artifact@v7
+        with:
+          name: mache-linux-arm64
+          path: image/linux-arm64/
+
+      - name: Download linux arm64 leyline binary
+        uses: actions/download-artifact@v7
+        with:
+          name: leyline-linux-arm64
+          path: image/linux-arm64/
 
       - name: Prepare binaries
         run: |
           mv image/linux-amd64/mache-linux-amd64 image/linux-amd64/mache
           mv image/linux-amd64/leyline-linux-amd64 image/linux-amd64/leyline
           chmod +x image/linux-amd64/mache image/linux-amd64/leyline
+          mv image/linux-arm64/mache-linux-arm64 image/linux-arm64/mache
+          mv image/linux-arm64/leyline-linux-arm64 image/linux-arm64/leyline
+          chmod +x image/linux-arm64/mache image/linux-arm64/leyline
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -138,7 +156,7 @@ jobs:
           context: .
           file: Dockerfile.release
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.IMAGE_NAME }}:${{ env.TAG }}
             ${{ env.IMAGE_NAME }}:latest
@@ -198,15 +216,16 @@ jobs:
 
           SHA_DARWIN_ARM64=$(grep mache-darwin-arm64 checksums.txt | awk '{print $1}')
           SHA_LINUX_AMD64=$(grep mache-linux-amd64 checksums.txt | awk '{print $1}')
+          SHA_LINUX_ARM64=$(grep mache-linux-arm64 checksums.txt | awk '{print $1}')
 
           sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/mache.rb
 
-          # Update sha256 values in order: darwin-arm64, linux-amd64
+          # Update sha256 values in order: darwin-arm64, linux-amd64, linux-arm64
           python3 -c "
           import re
           with open('Formula/mache.rb') as f:
               content = f.read()
-          shas = ['${SHA_DARWIN_ARM64}', '${SHA_LINUX_AMD64}']
+          shas = ['${SHA_DARWIN_ARM64}', '${SHA_LINUX_AMD64}', '${SHA_LINUX_ARM64}']
           i = 0
           def replace_sha(m):
               global i

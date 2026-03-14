@@ -7,10 +7,13 @@ artifact. It is glue — the logic lives in mache and ley-line.
 
 A build/packaging repo. Contains:
 - `Dockerfile` — multi-stage dev build
+- `Dockerfile.release` — slim image from pre-built binary
 - `melange.yaml` — APK package definition (builds the fat binary)
 - `apko.yaml` — distroless OCI image assembly
 - `Taskfile.yml` — orchestrates all build modes (uses [Task](https://taskfile.dev))
 - `scripts/entrypoint.sh` — container entrypoint
+- `.github/workflows/` — CI + release pipelines
+- `.envrc` — direnv config
 
 ## What kiln is NOT
 

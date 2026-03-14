@@ -18,12 +18,10 @@ COPY ley-line/rs/ ./rs/
 
 WORKDIR /build/ley-line/rs
 RUN cargo build --release --lib -p leyline-fs \
-    && cargo build --release --lib -p leyline-sign \
     && cargo build --release -p leyline-cli --features lsp
 
 # Produce the static library, C header, and leyline CLI binary
 RUN cp target/release/libleyline_fs.a /build/ \
-    && cp target/release/libleyline_sign.a /build/ 2>/dev/null || true \
     && cp target/release/leyline /build/leyline
 
 # If cbindgen header exists, copy it; otherwise the one in mache's vendor wins
@@ -32,7 +30,7 @@ RUN if [ -f crates/fs/include/leyline_fs.h ]; then \
     fi
 
 # ── Stage 2: Build mache with ley-line linked ───────────────────────
-FROM golang:1.23-bookworm AS go-builder
+FROM golang:1.25-bookworm AS go-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libc6-dev libsqlite3-dev \
@@ -43,7 +41,6 @@ COPY mache/ ./
 
 # Bring in ley-line artifacts from rust stage
 COPY --from=rust-builder /build/libleyline_fs.a /usr/local/lib/
-COPY --from=rust-builder /build/libleyline_sign.a /usr/local/lib/
 COPY --from=rust-builder /build/leyline_fs.h /usr/local/include/
 
 # Build mache, linking the ley-line staticlib
