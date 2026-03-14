@@ -1,5 +1,5 @@
 # Compiled binary
-bin/mache
+bin/
 
 # Task runner cache
 .task/
