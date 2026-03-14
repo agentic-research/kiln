@@ -45,7 +45,7 @@ pipeline:
     with:
       modroot: ./mache
       packages: ./cmd/mache
-      output: kiln
+      output: mache
       ldflags: "-s -w"
       tags: ""
     env:
@@ -55,4 +55,4 @@ pipeline:
 
   # Step 3: Install binaries
   - runs: |
-      install -Dm755 kiln "${{targets.destdir}}/usr/bin/kiln"
+      install -Dm755 mache "${{targets.destdir}}/usr/bin/mache"

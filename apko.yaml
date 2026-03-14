@@ -26,7 +26,7 @@ accounts:
   run-as: 65532
 
 entrypoint:
-  command: /usr/bin/kiln serve
+  command: /usr/bin/mache serve
 
 # Persistent projection cache
 volumes:
