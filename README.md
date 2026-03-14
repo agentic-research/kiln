@@ -116,6 +116,9 @@ For environments without a local install:
 }
 ```
 
+> `mache` above is the **image name**, not the binary. The container's
+> entrypoint runs `mache serve "$@"`, so only pass flags and the source path.
+
 ---
 
 ## Table of contents
