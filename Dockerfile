@@ -30,7 +30,7 @@ RUN if [ -f crates/fs/include/leyline_fs.h ]; then \
     fi
 
 # ── Stage 2: Build mache with ley-line linked ───────────────────────
-FROM golang:1.23-bookworm AS go-builder
+FROM golang:1.25-bookworm AS go-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libc6-dev libsqlite3-dev \
