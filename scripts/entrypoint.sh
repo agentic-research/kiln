@@ -9,8 +9,14 @@ DATA_DIR="$(dirname "$ARENA_PATH")"
 # Ensure data directory exists
 mkdir -p "$DATA_DIR"
 
+# In stdio mode, skip leyline daemon — stdio clients expect immediate handshake.
+STDIO_MODE=false
+for arg in "$@"; do
+  case "$arg" in --stdio) STDIO_MODE=true; break;; esac
+done
+
 # Start ley-line daemon in background (provides UDS control socket for LSP etc.)
-if command -v leyline >/dev/null 2>&1; then
+if [ "$STDIO_MODE" = false ] && command -v leyline >/dev/null 2>&1; then
   echo "Starting leyline daemon (arena=$ARENA_PATH, ctrl=$CTRL_PATH)"
   leyline serve \
     --arena "$ARENA_PATH" \
