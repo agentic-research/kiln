@@ -1,4 +1,4 @@
-# melange.yaml — build kiln as an APK package
+# melange.yaml -- package pre-built kiln binaries as an APK
 #
 # melange build melange.yaml --arch x86_64,aarch64 \
 #   --source-dir .. --signing-key melange.rsa
@@ -7,7 +7,7 @@ package:
   name: kiln
   version: 0.1.0
   epoch: 0
-  description: "mache + ley-line in a box — MCP server for structural code projection"
+  description: "mache + ley-line in a box -- MCP server for structural code projection"
   copyright:
     - license: Apache-2.0
   dependencies:
@@ -19,40 +19,25 @@ environment:
   contents:
     packages:
       - build-base
-      - go-1.25
-      - rust-1.82
-      - cargo
-      - sqlite-dev
       - ca-certificates-bundle
 
 pipeline:
-  # Step 1: Build ley-line staticlib + CLI binary
+  # Install pre-built binaries (no compilation needed)
   - runs: |
-      cd ley-line/rs
-      cargo build --release --lib -p leyline-fs
-      cargo build --release -p leyline-cli --features lsp
-      install -Dm644 target/release/libleyline_fs.a \
-        "${{targets.destdir}}/usr/lib/libleyline_fs.a"
-      install -Dm755 target/release/leyline \
+      ARCH=$(uname -m)
+      if [ "$ARCH" = "x86_64" ]; then SUFFIX="linux-amd64"; fi
+      if [ "$ARCH" = "aarch64" ]; then SUFFIX="linux-arm64"; fi
+
+      install -Dm755 "dist/mache-${SUFFIX}" \
+        "${{targets.destdir}}/usr/bin/mache"
+      install -Dm755 "dist/leyline-${SUFFIX}" \
         "${{targets.destdir}}/usr/bin/leyline"
-      if [ -f crates/fs/include/leyline_fs.h ]; then
-        install -Dm644 crates/fs/include/leyline_fs.h \
+
+      if [ -f "dist/libleyline_fs-${SUFFIX}.a" ]; then
+        install -Dm644 "dist/libleyline_fs-${SUFFIX}.a" \
+          "${{targets.destdir}}/usr/lib/libleyline_fs.a"
+      fi
+      if [ -f "dist/leyline_fs.h" ]; then
+        install -Dm644 "dist/leyline_fs.h" \
           "${{targets.destdir}}/usr/include/leyline_fs.h"
       fi
-
-  # Step 2: Build mache, linked against ley-line
-  - uses: go/build
-    with:
-      modroot: ./mache
-      packages: .
-      output: mache
-      ldflags: "-s -w"
-      tags: ""
-    env:
-      CGO_ENABLED: "1"
-      CGO_LDFLAGS: "-L${{targets.destdir}}/usr/lib -lleyline_fs -lm -ldl -lpthread"
-      CGO_CFLAGS: "-I${{targets.destdir}}/usr/include"
-
-  # Step 3: Install binaries
-  - runs: |
-      install -Dm755 mache "${{targets.destdir}}/usr/bin/mache"
