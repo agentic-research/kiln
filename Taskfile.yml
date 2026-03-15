@@ -1,3 +1,4 @@
+# Golden path: CI and local dev both use these tasks.
 version: '3'
 
 vars:
@@ -38,9 +39,25 @@ tasks:
     cmds:
       - task --list
 
-  # ── ley-line staticlib ───────────────────────────────────────────────
+  # ── Download pre-built upstream artifacts ──────────────────────────────
+  # CI uses pre-built artifacts from upstream releases.
+  # This task lets local dev do the same for testing the publish pipeline.
+  download:
+    desc: Download latest upstream release artifacts (ley-line + mache)
+    cmds:
+      - mkdir -p {{.ROOT_DIR}}/dist
+      - |
+        echo "Downloading ley-line artifacts..."
+        gh release download --repo agentic-research/ley-line -p '*' -D {{.ROOT_DIR}}/dist/ --clobber
+      - |
+        echo "Downloading mache artifacts..."
+        gh release download --repo agentic-research/mache -p '*' -D {{.ROOT_DIR}}/dist/ --clobber
+      - ls -lh {{.ROOT_DIR}}/dist/
+
+  # ── Local build: ley-line staticlib ────────────────────────────────────
+  # For local development only; CI uses pre-built artifacts from upstream releases.
   leyline-lib:
-    desc: Build ley-line staticlib (Rust)
+    desc: Build ley-line staticlib (Rust) -- local dev only
     dir: '{{.LEYLINE_DIR}}/rs'
     env:
       PKG_CONFIG_PATH: '{{if eq OS "darwin"}}{{.LEYLINE_DIR}}/rs/pkgconfig{{end}}'
@@ -53,9 +70,10 @@ tasks:
     generates:
       - '{{.LEYLINE_LIB}}'
 
-  # ── ley-line CLI binary ─────────────────────────────────────────────
+  # ── Local build: ley-line CLI binary ───────────────────────────────────
+  # For local development only; CI uses pre-built artifacts from upstream releases.
   leyline-binary:
-    desc: Build ley-line CLI binary (Rust, with LSP support)
+    desc: Build ley-line CLI binary (Rust, with LSP support) -- local dev only
     dir: '{{.LEYLINE_DIR}}/rs'
     env:
       PKG_CONFIG_PATH: '{{if eq OS "darwin"}}{{.LEYLINE_DIR}}/rs/pkgconfig{{end}}'
@@ -68,9 +86,10 @@ tasks:
       - '{{.LEYLINE_DIR}}/rs/crates/lsp/src/**/*.rs'
       - '{{.LEYLINE_DIR}}/rs/Cargo.toml'
 
-  # ── Fat binary ──────────────────────────────────────────────────────
+  # ── Local build: fat binary ────────────────────────────────────────────
+  # For local development only; CI uses pre-built artifacts from upstream releases.
   binary:
-    desc: Build fat binary (mache + ley-line linked via CGO)
+    desc: Build fat binary (mache + ley-line linked via CGO) -- local dev only
     deps: [leyline-lib, leyline-binary]
     dir: '{{.MACHE_DIR}}'
     env:
@@ -83,27 +102,6 @@ tasks:
         platforms: [darwin]
       - ls -lh {{.ROOT_DIR}}/bin/mache
 
-  # ── CI binary (stripped, custom output path) ────────────────────────
-  ci-binary:
-    desc: Build stripped mache + leyline binaries for CI release
-    deps: [leyline-lib]
-    dir: '{{.MACHE_DIR}}'
-    env:
-      CGO_ENABLED: '1'
-      CGO_CFLAGS: '{{if eq OS "darwin"}}-I{{.FUSE_T_HEADERS}} {{end}}-I{{.LEYLINE_INCLUDE}}'
-      CGO_LDFLAGS: '{{if eq OS "darwin"}}-F{{.FUSE_T_FRAMEWORK}} -framework fuse_t -Wl,-rpath,{{.FUSE_T_FRAMEWORK}} {{end}}{{.LEYLINE_LIB}} -lm -ldl -lpthread'
-    vars:
-      OUTPUT: '{{.OUTPUT | default (print .ROOT_DIR "/bin/mache")}}'
-      LEYLINE_OUTPUT: '{{.LEYLINE_OUTPUT | default (print .ROOT_DIR "/bin/leyline")}}'
-    cmds:
-      - go build -ldflags "-s -w -X github.com/agentic-research/mache/cmd.Version={{.VERSION}} -X github.com/agentic-research/mache/cmd.Commit={{.COMMIT}} -X github.com/agentic-research/mache/cmd.Date={{.DATE}}" -o {{.OUTPUT}} .
-      - cmd: codesign -s - --force --deep --entitlements entitlements.plist {{.OUTPUT}}
-        platforms: [darwin]
-      - ls -lh {{.OUTPUT}}
-      - task: leyline-binary
-        vars:
-          OUTPUT: '{{.LEYLINE_OUTPUT}}'
-
   install:
     desc: Build and install mache + leyline to ~/.local/bin
     deps: [binary]
@@ -114,7 +112,7 @@ tasks:
       - cmd: codesign -s - --force --deep --entitlements {{.MACHE_DIR}}/entitlements.plist ~/.local/bin/mache
         platforms: [darwin]
 
-  # ── Container images ────────────────────────────────────────────────
+  # ── Container images ──────────────────────────────────────────────────
   image:
     desc: Build Docker image (dev/iteration)
     cmds:
@@ -149,9 +147,9 @@ tasks:
           cosign sign {{.IMAGE_NAME}}:{{.VERSION}}
         fi
 
-  # ── Test ─────────────────────────────────────────────────────────────
+  # ── Test ───────────────────────────────────────────────────────────────
   test:
-    desc: Smoke test — project kiln's own source via MCP
+    desc: Smoke test -- project kiln's own source via MCP
     deps: [binary]
     cmds:
       - |
@@ -159,7 +157,7 @@ tasks:
           ./bin/mache serve --stdio . | head -1
       - echo "OK"
 
-  # ── Dev ──────────────────────────────────────────────────────────────
+  # ── Dev ────────────────────────────────────────────────────────────────
   shell:
     desc: Drop into container for debugging
     deps: [image]
@@ -170,11 +168,11 @@ tasks:
           --entrypoint /bin/bash \
           {{.IMAGE_NAME}}:latest
 
-  # ── Clean ────────────────────────────────────────────────────────────
+  # ── Clean ──────────────────────────────────────────────────────────────
   clean:
     desc: Remove build artifacts
     cmds:
-      - rm -rf ./bin ./packages ./kiln.tar
+      - rm -rf ./bin ./dist ./packages ./kiln.tar
       - rm -f melange.rsa melange.rsa.pub
       - cmd: docker rmi {{.IMAGE_NAME}}:latest {{.IMAGE_NAME}}:{{.VERSION}} 2>/dev/null
         ignore_error: true

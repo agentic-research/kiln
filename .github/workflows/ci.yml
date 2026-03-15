@@ -1,10 +1,11 @@
+# Golden path: CI and local dev both use Taskfile tasks.
 name: CI
 
-# Triggered by upstream repos (mache, ley-line) on merge to main,
-# or manually for ad-hoc builds.
+# Triggered by upstream repos (ley-line, mache) on merge to main,
+# or manually for ad-hoc releases.
 on:
   repository_dispatch:
-    types: [upstream-update]
+    types: [upstream-update, leyline-release, mache-release]
   workflow_dispatch:
     inputs:
       release:
@@ -38,7 +39,8 @@ jobs:
           echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
           echo "Source: ${{ github.event.client_payload.repo || 'manual' }}"
-          echo "Latest: $LATEST → Next: $NEXT"
+          echo "Event: ${{ github.event.action || 'workflow_dispatch' }}"
+          echo "Latest: $LATEST -> Next: $NEXT"
 
       - name: Tag and trigger release
         if: ${{ github.event_name == 'repository_dispatch' || inputs.release }}
@@ -51,4 +53,4 @@ jobs:
           git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "${{ steps.version.outputs.next }}"
           # Tags pushed from GHA don't trigger workflows, so explicitly dispatch
           gh workflow run release.yml -f tag="${{ steps.version.outputs.next }}"
-          echo "Tagged ${{ steps.version.outputs.next }} — triggered release workflow"
+          echo "Tagged ${{ steps.version.outputs.next }} -- triggered release workflow"

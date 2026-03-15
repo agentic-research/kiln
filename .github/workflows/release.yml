@@ -22,86 +22,66 @@ env:
   TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest       # Apple Silicon
-            artifact: mache-darwin-arm64
-            leyline-artifact: leyline-darwin-arm64
-          - os: ubuntu-latest
-            artifact: mache-linux-amd64
-            leyline-artifact: leyline-linux-amd64
-          - os: ubuntu-24.04-arm
-            artifact: mache-linux-arm64
-            leyline-artifact: leyline-linux-arm64
-
-    runs-on: ${{ matrix.os }}
-
+  # Download pre-built artifacts from upstream releases (no build matrix needed)
+  download:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout kiln
-        uses: actions/checkout@v6
-
-      - name: Checkout mache
-        uses: actions/checkout@v6
-        with:
-          repository: agentic-research/mache
-          path: mache
-
-      - name: Checkout ley-line
-        uses: actions/checkout@v6
-        with:
-          repository: agentic-research/ley-line
-          path: ley-line
-          token: ${{ secrets.LEYLINE_PAT }}
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.25'
-          cache-dependency-path: mache/go.sum
-
-      - name: Install Task
-        uses: go-task/setup-task@v1
-
-      # Platform deps — the only CI-specific part
-      - name: Install fuse-t (macOS)
-        if: runner.os == 'macOS'
-        run: brew install --cask fuse-t && brew install capnp
-
-      - name: Install libfuse-dev (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libfuse-dev capnproto
-
-      # Build — same command locally and in CI
-      # In CI, repos are checked out inside workspace (not siblings)
-      - name: Build
+      - name: Download ley-line release artifacts
         env:
-          MACHE_DIR: ${{ github.workspace }}/mache
-          LEYLINE_DIR: ${{ github.workspace }}/ley-line
+          GH_TOKEN: ${{ secrets.LEYLINE_PAT }}
         run: |
-          task ci-binary \
-            OUTPUT=${{ github.workspace }}/${{ matrix.artifact }} \
-            LEYLINE_OUTPUT=${{ github.workspace }}/${{ matrix.leyline-artifact }}
+          mkdir -p dist
+          gh release download --repo agentic-research/ley-line -p '*' -D dist/
+          echo "=== ley-line artifacts ==="
+          ls -lh dist/
 
-      - name: Upload mache artifact
+      - name: Download mache release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download --repo agentic-research/mache -p '*' -D dist/
+          echo "=== all artifacts ==="
+          ls -lh dist/
+
+      - name: Upload leyline-darwin-arm64
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          name: leyline-darwin-arm64
+          path: dist/leyline-darwin-arm64
 
-      - name: Upload leyline artifact
+      - name: Upload leyline-linux-amd64
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.leyline-artifact }}
-          path: ${{ matrix.leyline-artifact }}
+          name: leyline-linux-amd64
+          path: dist/leyline-linux-amd64
+
+      - name: Upload leyline-linux-arm64
+        uses: actions/upload-artifact@v6
+        with:
+          name: leyline-linux-arm64
+          path: dist/leyline-linux-arm64
+
+      - name: Upload mache-darwin-arm64
+        uses: actions/upload-artifact@v6
+        with:
+          name: mache-darwin-arm64
+          path: dist/mache-darwin-arm64
+
+      - name: Upload mache-linux-amd64
+        uses: actions/upload-artifact@v6
+        with:
+          name: mache-linux-amd64
+          path: dist/mache-linux-amd64
+
+      - name: Upload mache-linux-arm64
+        uses: actions/upload-artifact@v6
+        with:
+          name: mache-linux-arm64
+          path: dist/mache-linux-arm64
 
   # OCI image (linux/amd64 + linux/arm64)
   container:
-    needs: build
+    needs: download
     runs-on: ubuntu-latest
     steps:
       - name: Checkout kiln
@@ -169,7 +149,7 @@ jobs:
 
   # GitHub Release with binaries
   release:
-    needs: build
+    needs: download
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
