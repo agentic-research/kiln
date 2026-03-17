@@ -41,3 +41,16 @@ pipeline:
         install -Dm644 "dist/leyline_fs.h" \
           "${{targets.destdir}}/usr/include/leyline_fs.h"
       fi
+
+test:
+  pipeline:
+    - runs: |
+        mache version
+        mache --help
+        leyline --help
+
+update:
+  enabled: true
+  github:
+    identifier: agentic-research/kiln
+    strip-prefix: v
