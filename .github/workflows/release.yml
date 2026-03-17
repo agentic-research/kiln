@@ -14,7 +14,8 @@ on:
 permissions:
   contents: write
   packages: write
-  id-token: write  # cosign keyless signing
+  id-token: write   # cosign keyless + SLSA provenance
+  actions: read      # SLSA provenance detection
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/mache
@@ -147,11 +148,15 @@ jobs:
       - name: Sign image
         run: cosign sign --yes ${{ env.IMAGE_NAME }}:${{ env.TAG }}
 
-  # GitHub Release with binaries
+  # GitHub Release with binaries + SBOM
   release:
     needs: download
     runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
     steps:
+      - uses: actions/checkout@v6
+
       - name: Download all artifacts
         uses: actions/download-artifact@v7
         with:
@@ -164,6 +169,20 @@ jobs:
           sha256sum mache-* leyline-* > checksums.txt
           cat checksums.txt
 
+      - name: Generate subject hashes for SLSA
+        id: hash
+        run: |
+          cd dist
+          echo "hashes=$(sha256sum mache-* leyline-* | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      # --- SBOM ---
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/kiln.spdx.json
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -173,6 +192,43 @@ jobs:
             dist/mache-*
             dist/leyline-*
             dist/checksums.txt
+            dist/kiln.spdx.json
+
+      # --- Cosign binary signing ---
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign release binaries
+        run: |
+          cd dist
+          for f in mache-* leyline-*; do
+            [ -f "$f" ] || continue
+            cosign sign-blob --yes "$f" \
+              --output-signature "${f}.sig" \
+              --output-certificate "${f}.cert"
+          done
+
+      - name: Upload signatures to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: |
+            dist/*.sig
+            dist/*.cert
+
+  # --- SLSA Provenance (Level 3) ---
+  provenance:
+    name: SLSA Provenance
+    needs: release
+    if: always()
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.release.outputs.hashes }}"
+      upload-assets: true
 
   # Update Homebrew tap formula with new checksums
   homebrew:
