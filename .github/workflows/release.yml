@@ -39,7 +39,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release download --repo agentic-research/mache -p '*' -D dist/
+          gh release download --repo agentic-research/mache -p '*' --clobber -D dist/
           echo "=== all artifacts ==="
           ls -lh dist/
 
