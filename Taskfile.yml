@@ -78,7 +78,7 @@ tasks:
     env:
       PKG_CONFIG_PATH: '{{if eq OS "darwin"}}{{.LEYLINE_DIR}}/rs/pkgconfig{{end}}'
     cmds:
-      - cargo build --release -p leyline-cli --features lsp --target {{.RUST_TARGET}}
+      - cargo build --release -p leyline-cli --features "lsp,embed" --target {{.RUST_TARGET}}
       - cp target/{{.RUST_TARGET}}/release/leyline {{.OUTPUT | default (print .ROOT_DIR "/bin/leyline")}}
       - ls -lh {{.OUTPUT | default (print .ROOT_DIR "/bin/leyline")}}
     sources:
