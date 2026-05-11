@@ -1,3 +1,30 @@
+# kiln (retired)
+
+> **🪦 RETIRED — 2026-05-11.** This repository was a Homebrew tap +
+> shared apko/melange build setup for mache. It has been retired
+> because each sibling repo now owns its own OCI image build in-repo:
+>
+> | Project | Image build path |
+> |---|---|
+> | mache | [`agentic-research/mache`](https://github.com/agentic-research/mache) — `task image` |
+> | rosary | [`agentic-research/rosary`](https://github.com/agentic-research/rosary) — `task image` |
+> | notme | [`agentic-research/notme`](https://github.com/agentic-research/notme) — `task image` |
+> | ley-line-open | [`agentic-research/ley-line-open`](https://github.com/agentic-research/ley-line-open) — `task image` |
+> | cloister | [`agentic-research/cloister`](https://github.com/agentic-research/cloister) — `task image` |
+>
+> If you came here looking for **mache installation** specifically, see
+> [`agentic-research/mache`](https://github.com/agentic-research/mache).
+> If you want **cluster-style deployment** of the whole substrate, see
+> [`agentic-research/cloister`](https://github.com/agentic-research/cloister)'s
+> `task cluster:up`.
+>
+> The repository is read-only (archived). No new issues / PRs will be
+> processed; please file them in the active repo above.
+>
+> Historical content preserved below.
+
+---
+
 # kiln
 
 Where you fire a mache.
